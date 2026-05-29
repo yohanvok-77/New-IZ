@@ -23,52 +23,64 @@ function isAuthorized(request: Request) {
 }
 
 async function createInitialAdmin(request: Request) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ message: "Unauthorized." }, { status: 401 });
-  }
+  try {
+    if (!isAuthorized(request)) {
+      return NextResponse.json({ message: "Unauthorized." }, { status: 401 });
+    }
 
-  const adminEmail = normalizeEmail(process.env.ADMIN_EMAIL || "");
-  const adminPassword = process.env.ADMIN_PASSWORD || "";
-  const adminName = process.env.ADMIN_NAME || "Admin";
+    const adminEmail = normalizeEmail(process.env.ADMIN_EMAIL || "");
+    const adminPassword = process.env.ADMIN_PASSWORD || "";
+    const adminName = process.env.ADMIN_NAME || "Admin";
 
-  if (!isValidEmail(adminEmail) || !isValidPassword(adminPassword)) {
+    if (!isValidEmail(adminEmail) || !isValidPassword(adminPassword)) {
+      return NextResponse.json(
+        { message: "ADMIN_EMAIL or ADMIN_PASSWORD is missing/invalid." },
+        { status: 400 },
+      );
+    }
+
+    const adminCount = await prisma.user.count({ where: { role: "ADMIN" } });
+
+    if (adminCount > 0) {
+      return NextResponse.json({ message: "Admin already exists.", created: false });
+    }
+
+    const admin = await prisma.user.create({
+      data: {
+        name: adminName,
+        email: adminEmail,
+        passwordHash: await hashPassword(adminPassword),
+        role: "ADMIN",
+        status: "ACTIVE",
+        accessUntil: addMonths(new Date(), 12),
+      },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        accessUntil: true,
+      },
+    });
+
+    return NextResponse.json({
+      message: "Admin created.",
+      created: true,
+      admin: {
+        ...admin,
+        accessUntil: admin.accessUntil?.toISOString() || null,
+      },
+    });
+  } catch (error) {
+    console.error("[setup-admin] failed to create initial admin", error);
+
     return NextResponse.json(
-      { message: "ADMIN_EMAIL or ADMIN_PASSWORD is missing/invalid." },
-      { status: 400 },
+      {
+        message: "Setup failed. Check DATABASE_URL, Prisma migrations, and Render logs.",
+        error: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 },
     );
   }
-
-  const adminCount = await prisma.user.count({ where: { role: "ADMIN" } });
-
-  if (adminCount > 0) {
-    return NextResponse.json({ message: "Admin already exists.", created: false });
-  }
-
-  const admin = await prisma.user.create({
-    data: {
-      name: adminName,
-      email: adminEmail,
-      passwordHash: await hashPassword(adminPassword),
-      role: "ADMIN",
-      status: "ACTIVE",
-      accessUntil: addMonths(new Date(), 12),
-    },
-    select: {
-      id: true,
-      email: true,
-      role: true,
-      accessUntil: true,
-    },
-  });
-
-  return NextResponse.json({
-    message: "Admin created.",
-    created: true,
-    admin: {
-      ...admin,
-      accessUntil: admin.accessUntil?.toISOString() || null,
-    },
-  });
 }
 
 export async function GET(request: Request) {
