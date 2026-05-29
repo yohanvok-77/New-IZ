@@ -1,0 +1,113 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String     @id @default(cuid())
+  name         String?
+  email        String     @unique
+  passwordHash String
+  role         UserRole   @default(USER)
+  status       UserStatus @default(ACTIVE)
+  accessUntil  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+model AccessLog {
+  id        String   @id @default(cuid())
+  adminId   String
+  userId    String
+  action    String
+  oldValue  String?
+  newValue  String?
+  createdAt DateTime @default(now())
+
+  @@index([adminId])
+  @@index([userId])
+}
+
+model Signal {
+  id              String        @id @default(cuid())
+  pair            String
+  direction       SignalDirection
+  winrate         Int
+  entry           Decimal
+  stopLoss        Decimal
+  takeProfit      Decimal
+  status          SignalStatus  @default(PENDING)
+  publishedAt     DateTime      @default(now())
+  expiresAt       DateTime
+  lastMarketPrice Decimal?
+  lastBid         Decimal?
+  lastAsk         Decimal?
+  lastCheckedAt   DateTime?
+  activatedAt     DateTime?
+  closedAt        DateTime?
+  entryHitPrice   Decimal?
+  closePrice      Decimal?
+  closeReason     String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  events          SignalEvent[]
+
+  @@index([status])
+  @@index([pair])
+  @@index([expiresAt])
+}
+
+model SignalEvent {
+  id        String          @id @default(cuid())
+  signalId  String
+  signal    Signal          @relation(fields: [signalId], references: [id], onDelete: Cascade)
+  type      SignalEventType
+  price     Decimal?
+  bid       Decimal?
+  ask       Decimal?
+  message   String?
+  createdAt DateTime        @default(now())
+
+  @@index([signalId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  BLOCKED
+}
+
+enum SignalDirection {
+  BUY
+  SELL
+}
+
+enum SignalStatus {
+  PENDING
+  ACTIVE
+  CLOSED_TP
+  CLOSED_SL
+  EXPIRED
+  CANCELLED
+}
+
+enum SignalEventType {
+  CREATED
+  PRICE_CHECK
+  ENTRY_HIT
+  TP_HIT
+  SL_HIT
+  EXPIRED
+  CANCELLED
+  MANUAL_UPDATE
+}
